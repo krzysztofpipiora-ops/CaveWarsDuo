@@ -1,0 +1,19 @@
+name: CaveWarsDuo
+version: 1.0
+main: pl.stefan.cavewarsduo.CaveWarsDuo
+api-version: 1.21
+author: Stefan
+description: CaveWars w trybie Duo - maksymalnie 6 drużyn
+
+commands:
+  cwduo:
+    description: Dołącz do areny Duo
+    usage: /cwduo
+  cwcreateduo:
+    description: Utwórz arenę Duo (tylko OP)
+    usage: /cwcreateduo
+
+permissions:
+  cavewarsduo.create:
+    description: Pozwala na tworzenie aren Duo
+    default: op
