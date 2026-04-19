@@ -50,6 +50,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         int pvpGraceTime = 180;
         List<Location> spawnPoints = new ArrayList<>();
         Set<UUID> eliminated = new HashSet<>();
+        Set<UUID> playersWhoPlayed = new HashSet<>(); // KLUCZOWE - kto naprawdę grał
         double borderRadius = 200.0;
         int borderShrinkRemaining = 0;
         boolean borderEnabled = false;
@@ -71,7 +72,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
             RegisteredServiceProvider<Economy> rsp = Bukkit.getServicesManager().getRegistration(Economy.class);
             if (rsp != null) {
                 economy = rsp.getProvider();
-                getLogger().info("§aVault Economy połączony!");
+                getLogger().info("§aVault Economy połączony z CaveWarsDuo!");
             }
         }
 
@@ -102,6 +103,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         }, 60L, 20L);
     }
 
+    // ==================== FREEZE ====================
     private void applyStartFreeze(ArenaData arena) {
         for (Player p : arena.world.getPlayers()) {
             p.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 200, 255, false, false));
@@ -113,6 +115,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         }
     }
 
+    // ==================== DROP POD GRACZEM ====================
     private void dropItemUnderPlayer(Player p, ItemStack item) {
         if (item == null || item.getType() == Material.AIR) return;
         HashMap<Integer, ItemStack> leftover = p.getInventory().addItem(item);
@@ -123,6 +126,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         }
     }
 
+    // ==================== LOBBY ====================
     private void handleLobbyCountdown(ArenaData arena) {
         int count = arena.world.getPlayers().size();
         if (count < 2) {
@@ -136,7 +140,9 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
             if (arena.countdown % 10 == 0 || arena.countdown <= 5) {
                 showCountdownTitle(arena.world, arena.countdown);
             }
-            if (arena.countdown == 1) applyStartFreeze(arena);
+            if (arena.countdown == 1) {
+                applyStartFreeze(arena);
+            }
             arena.countdown--;
         } else if (arena.countdown == 0) {
             arena.countdown = -1;
@@ -146,8 +152,12 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
     }
 
     private void showCountdownTitle(World world, int seconds) {
-        String title = (seconds > 10) ? ChatColor.YELLOW + "" + ChatColor.BOLD + "START ZA" : ChatColor.RED + "" + ChatColor.BOLD + seconds;
-        String subtitle = (seconds > 10) ? ChatColor.GOLD + "" + ChatColor.BOLD + seconds + ChatColor.YELLOW + " sekund" : ChatColor.YELLOW + "Przygotuj się...";
+        String title = (seconds > 10) ? 
+                ChatColor.YELLOW + "" + ChatColor.BOLD + "START ZA" : 
+                ChatColor.RED + "" + ChatColor.BOLD + seconds;
+        String subtitle = (seconds > 10) ? 
+                ChatColor.GOLD + "" + ChatColor.BOLD + seconds + ChatColor.YELLOW + " sekund" : 
+                ChatColor.YELLOW + "Przygotuj się...";
 
         for (Player p : world.getPlayers()) {
             p.sendTitle(title, subtitle, 0, 45, 10);
@@ -169,6 +179,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         arena.active = true;
         arena.pvpGraceTime = 180;
         arena.eliminated.clear();
+        arena.playersWhoPlayed.clear();
         arena.spawnPoints.clear();
 
         setArenaWorldBorder(arena.world);
@@ -179,6 +190,7 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         List<Player> players = new ArrayList<>(arena.world.getPlayers());
         Collections.shuffle(players);
 
+        // MAX 6 DRUŻYN (12 graczy)
         for (int i = 0; i < players.size() && i < 12; i += 2) {
             Player p1 = players.get(i);
             Player p2 = (i + 1 < players.size()) ? players.get(i + 1) : null;
@@ -189,6 +201,8 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
             if (p2 != null) p2.teleport(spawn.clone().add(1.5, 0.1, 0.5));
 
             arena.spawnPoints.add(spawn);
+            arena.playersWhoPlayed.add(p1.getUniqueId());
+            if (p2 != null) arena.playersWhoPlayed.add(p2.getUniqueId());
 
             for (Player p : new Player[]{p1, p2}) {
                 if (p == null) continue;
@@ -203,7 +217,8 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
         }
 
         broadcastToWorld(arena.world, ChatColor.LIGHT_PURPLE + "§lCAVEWARS DUO — Maksymalnie 6 drużyn");
-        broadcastToWorld(arena.world, ChatColor.RED + "§lGranica zaczęła się kurczyć!");
+        broadcastToWorld(arena.world, ChatColor.RED + "§lSztuczna granica zaczęła się kurczyć!");
+        broadcastToWorld(arena.world, ChatColor.GREEN + "Ochrona PvP aktywna przez 180 sekund!");
     }
 
     private void setPlayerLevel30(Player p) {
@@ -267,16 +282,11 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
                 nearest = other;
             }
         }
-
-        String pvp = arena.pvpGraceTime > 0 
-                ? ChatColor.GREEN + "Ochrona: " + arena.pvpGraceTime + "s " 
-                : ChatColor.RED + "PvP: ON ";
-
-        String message = nearest != null 
+        String pvp = arena.pvpGraceTime > 0 ? ChatColor.GREEN + "Ochrona: " + arena.pvpGraceTime + "s " : ChatColor.RED + "PvP: ON ";
+        String msg = nearest != null 
                 ? pvp + ChatColor.DARK_GRAY + " | " + ChatColor.GOLD + "Najbliższy: " + ChatColor.WHITE + (int) minDistance + " bloków"
                 : pvp + ChatColor.DARK_GRAY + " | " + ChatColor.YELLOW + "Brak innych żywych graczy";
-
-        p.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
+        p.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(msg));
     }
 
     private void updateBossBar(Player p, ArenaData a) {
@@ -534,8 +544,12 @@ public class CaveWarsDuo extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerChangeWorld(PlayerChangedWorldEvent e) {
-        if (arenas.containsKey(e.getFrom().getUID())) {
-            resetPlayerAfterArena(e.getPlayer());
+        World from = e.getFrom();
+        if (registeredWorlds.contains(from.getUID())) {
+            ArenaData arena = arenas.get(from.getUID());
+            if (arena != null && arena.playersWhoPlayed.contains(e.getPlayer().getUniqueId())) {
+                resetPlayerAfterArena(e.getPlayer());
+            }
         }
     }
 
